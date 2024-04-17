@@ -1,0 +1,168 @@
+<meta charset="utf-8">
+<div>
+    <span>行数</span>
+    <input id="rowCount" value="5000">
+    <span>列数</span>
+    <input id="columnCount" value="500">
+    <button id="start">加载</button>
+</div>
+<div>渲染时间：<span id="timeCount"></span></div>
+<style>
+    .table-fill {
+        top: 0;
+        left: 0;
+    }
+
+    .table-fill,
+    .table-col {
+        position: absolute;
+    }
+
+    #table {
+        border: 1px solid #ddd;
+    }
+
+    .table-col {
+        border-left: 1px solid #ddd;
+        border-top: 1px solid #ddd;
+        display: flex;
+        align-items: center;
+    }
+
+    .table-col input {
+        border: none;
+        width: 100%;
+    }
+</style>
+<div id="table" style="position: relative;width: 1000px;height: 700px;overflow: auto;">
+
+</div>
+
+<script>
+    if (!window.$) {
+        window.$ = function (selector, context = document) {
+            return context.querySelector(selector)
+        }
+    }
+
+
+    $('#start').onclick = function () {
+        createTable()
+    }
+
+    const tableElement = $('#table');
+    let cols = [];
+    let rows = [];
+    let columns = [];
+    tableElement.onscroll = function () {
+        updateDisplayCols(cols, getTableDisplayRect(), true);
+    }
+
+    function createTable() {
+        tableElement.innerHTML = "";
+        columns = Array.from({ length: parseInt($('#columnCount').value) || 100 }, (_, e) => `col${e}`);
+        rows = Array.from({ length: parseInt($('#rowCount').value) || 100 }, (_, row) => Object.fromEntries(columns.map((e, col) => ([e, `${row}_${col}`]))));
+
+        // const sTimer = performance.now()
+        // console.time('createTable')
+
+        const sTimer = performance.now();
+        const dfrag = document.createDocumentFragment();
+
+        dfrag.appendChild(createElement("div", `width:${columns.length * 100}px;height:1px;`, { className: "table-fill" }));
+        dfrag.appendChild(createElement("div", `width:1px;height:${rows.length * 30}px;`, { className: "table-fill" }));
+
+        cols = rows.map((_, rowIndex) =>
+            columns.map((_, colIndex) => ({
+                rowIndex,
+                colIndex,
+                element: null
+            }))
+        );
+
+        updateDisplayCols(cols, getTableDisplayRect());
+
+        tableElement.appendChild(dfrag)
+        // console.timeEnd('createTable')
+        // alert(performance.now() - sTimer)
+        $('#timeCount').textContent = `${performance.now() - sTimer}:ms`
+    }
+
+    function renderCell(cellOptions) {
+        const cell = createElement("div", `width:100px;height:30px;top:${cellOptions.rowIndex * 30 - 1}px;left:${cellOptions.colIndex * 100 - 1}px;`, {
+            className: "table-col",
+            textContent: rows[cellOptions.rowIndex][columns[cellOptions.colIndex]]
+        });
+        // cell.appendChild(createElement('input', '', {
+        //     value: rows[cellOptions.rowIndex][columns[cellOptions.colIndex]],
+        //     tabIndex: cellOptions.rowIndex * columns.length + cellOptions.colIndex + 1
+        // }))
+        cellOptions.element = cell;
+        tableElement.appendChild(cell)
+    }
+
+    function destoryCell(cellOptions) {
+        cellOptions.element.remove()
+        cellOptions.element = null;
+    }
+
+    function getTableDisplayRect() {
+        return {
+            height: tableElement.offsetHeight,
+            width: tableElement.offsetWidth,
+            left: tableElement.scrollLeft,
+            top: tableElement.scrollTop
+        }
+    }
+
+    function createElement(tag, cssText, options) {
+        const element = Object.assign(document.createElement(tag), options);
+        if (cssText) {
+            element.style.cssText = cssText
+        }
+        return element
+    }
+
+    let preDisplayCols = new Set();
+    let beforeBuffer = 300;
+    let preRect;
+    function updateDisplayCols(cols, rect, isOnScroll) {
+        if (isOnScroll && preRect) {
+            if (Math.abs(preRect.left - rect.left) < 100 && Math.abs(preRect.top - rect.top) < 100) {
+                return
+            }
+        }
+
+        const startColIndex = Math.max(Math.floor((rect.left - beforeBuffer) / 100), 0);
+        const endColIndex = Math.min(Math.ceil((rect.left + rect.width + beforeBuffer) / 100), cols[0].length);
+
+        const startRowIndex = Math.max(Math.floor((rect.top - beforeBuffer) / 30), 0);
+        const endRowIndex = Math.ceil((rect.top + rect.height + beforeBuffer) / 30, cols.length);
+        const displayCols = [].concat(...cols.slice(startRowIndex, endRowIndex).map(row => row.slice(startColIndex, endColIndex)));
+
+        const newDisplayCols = new Set(displayCols);
+        if (preDisplayCols.size) {
+            displayCols.filter(e => {
+                if (preDisplayCols.has(e)) {
+                    preDisplayCols.delete(e)
+                } else {
+                    if (!e.element) {
+                        renderCell(e)
+                    }
+                }
+            })
+
+            for (const e of preDisplayCols) {
+                destoryCell(e)
+            }
+        } else {
+            for (const e of displayCols) {
+                if (!e.element) {
+                    renderCell(e)
+                }
+            }
+        }
+        preDisplayCols = new Set(displayCols);
+        preRect = rect
+    }
+</script>
